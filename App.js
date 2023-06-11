@@ -7,9 +7,12 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  Alert,
 } from "react-native";
+import { Fontisto } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { theme } from "./colors";
-
+const STORAGE_KEY = "@toDos";
 export default function App() {
   const [working, setWorking] = useState(true);
   const [text, setText] = useState("");
@@ -23,11 +26,20 @@ export default function App() {
   const onChangeText = useCallback((payload) => {
     setText(payload);
   }, []);
-  const addToDo = useCallback(() => {
+  const saveTodos = useCallback(async (toSave) => {
+    const s = JSON.stringify(toSave);
+    await AsyncStorage.setItem(STORAGE_KEY, s);
+  }, []);
+  const loadToDos = useCallback(async () => {
+    const s = await AsyncStorage.getItem(STORAGE_KEY);
+    if (s) {
+      setToDos(JSON.parse(s));
+    }
+  }, []);
+  const addToDo = useCallback(async () => {
     if (text === "") {
       return;
     }
-    setText("");
     const newTodos = Object.assign(
       {},
       {
@@ -35,11 +47,31 @@ export default function App() {
       },
       toDos
     );
+    saveTodos(newTodos);
     setToDos(newTodos);
+    setText("");
   }, [text]);
   useEffect(() => {
-    console.log("toDos", toDos);
-  }, [toDos]);
+    loadToDos();
+  }, []);
+  const deleteTodo = useCallback(
+    (key) => {
+      Alert.alert("Delete To Do", "Are you sure?", [
+        { text: "Cancel" },
+        {
+          text: "I'm Sure",
+          onPress: () => {
+            const newTodos = { ...toDos };
+            delete newTodos[key];
+            saveTodos(newTodos);
+            setToDos(newTodos);
+          },
+        },
+      ]);
+      return;
+    },
+    [toDos]
+  );
   return (
     <View style={styles.container}>
       <StatusBar style="auto" />
@@ -81,10 +113,15 @@ export default function App() {
           Object.keys(toDos).map((key) => {
             if (working === toDos[key].work) {
               return (
-                <View style={styles.toDo}>
-                  <Text style={styles.toDoText} key={key}>
-                    {toDos[key].text}
-                  </Text>
+                <View style={styles.toDo} key={key}>
+                  <Text style={styles.toDoText}>{toDos[key].text}</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      deleteTodo(key);
+                    }}
+                  >
+                    <Fontisto name="trash" size={18} color={theme.gray} />
+                  </TouchableOpacity>
                 </View>
               );
             }
@@ -118,7 +155,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 30,
-    marginVertical: 10,
+    marginVertical: 20,
     fontSize: 18,
   },
   toDo: {
@@ -127,10 +164,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.toDoBg,
     marginBottom: 10,
     borderRadius: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   toDoText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: 600,
+    fontWeight: 500,
   },
 });
