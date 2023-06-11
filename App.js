@@ -9,19 +9,22 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { Fontisto } from "@expo/vector-icons";
+import { FontAwesome } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { theme } from "./colors";
 const STORAGE_KEY = "@toDos";
+const STORAGE_KEY2 = "@working";
 export default function App() {
   const [working, setWorking] = useState(true);
   const [text, setText] = useState("");
   const [toDos, setToDos] = useState({});
-  const work = useCallback(() => {
+  const work = useCallback(async () => {
     setWorking(true);
+    saveCurrent(true);
   }, []);
-  const travel = useCallback(() => {
+  const travel = useCallback(async () => {
     setWorking(false);
+    saveCurrent(false);
   }, []);
   const onChangeText = useCallback((payload) => {
     setText(payload);
@@ -30,10 +33,18 @@ export default function App() {
     const s = JSON.stringify(toSave);
     await AsyncStorage.setItem(STORAGE_KEY, s);
   }, []);
-  const loadToDos = useCallback(async () => {
-    const s = await AsyncStorage.getItem(STORAGE_KEY);
-    if (s) {
-      setToDos(JSON.parse(s));
+  const saveCurrent = useCallback(async (working) => {
+    const s = JSON.stringify(working);
+    await AsyncStorage.setItem(STORAGE_KEY2, s);
+  }, []);
+  const loadStorage = useCallback(async () => {
+    const s1 = await AsyncStorage.getItem(STORAGE_KEY);
+    const s2 = await AsyncStorage.getItem(STORAGE_KEY2);
+    if (s1) {
+      setToDos(JSON.parse(s1));
+    }
+    if (s2) {
+      setWorking(JSON.parse(s2));
     }
   }, []);
   const addToDo = useCallback(async () => {
@@ -43,7 +54,7 @@ export default function App() {
     const newTodos = Object.assign(
       {},
       {
-        [Date.now()]: { text, work: working },
+        [Date.now()]: { text, work: working, completed: false },
       },
       toDos
     );
@@ -52,26 +63,9 @@ export default function App() {
     setText("");
   }, [text]);
   useEffect(() => {
-    loadToDos();
+    loadStorage();
   }, []);
-  const deleteTodo = useCallback(
-    (key) => {
-      Alert.alert("Delete To Do", "Are you sure?", [
-        { text: "Cancel" },
-        {
-          text: "I'm Sure",
-          onPress: () => {
-            const newTodos = { ...toDos };
-            delete newTodos[key];
-            saveTodos(newTodos);
-            setToDos(newTodos);
-          },
-        },
-      ]);
-      return;
-    },
-    [toDos]
-  );
+
   return (
     <View style={styles.container}>
       <StatusBar style="auto" />
@@ -113,16 +107,14 @@ export default function App() {
           Object.keys(toDos).map((key) => {
             if (working === toDos[key].work) {
               return (
-                <View style={styles.toDo} key={key}>
-                  <Text style={styles.toDoText}>{toDos[key].text}</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      deleteTodo(key);
-                    }}
-                  >
-                    <Fontisto name="trash" size={18} color={theme.gray} />
-                  </TouchableOpacity>
-                </View>
+                <Item
+                  item={toDos[key]}
+                  key={key}
+                  keyNum={key}
+                  toDos={toDos}
+                  saveTodos={saveTodos}
+                  setToDos={setToDos}
+                />
               );
             }
           })}
@@ -130,7 +122,113 @@ export default function App() {
     </View>
   );
 }
-
+const Item = ({ item, keyNum: key, toDos, saveTodos, setToDos }) => {
+  const [isEdit, setIsEdit] = useState(false);
+  const [changeTxt, setChangeText] = useState("");
+  const btnEdit = useCallback(() => {
+    if (isEdit) {
+      Alert.alert("Change Todo?", "Are you sure?", [
+        { text: "Cancel" },
+        {
+          text: "I'm sure",
+          onPress: () => {
+            const newTodos = { ...toDos };
+            newTodos[key].text = changeTxt;
+            saveTodos(newTodos);
+            setToDos(newTodos);
+            setIsEdit((prev) => !prev);
+          },
+        },
+      ]);
+    } else {
+      setIsEdit((prev) => !prev);
+    }
+  }, [isEdit, changeTxt]);
+  const completeTodo = useCallback(
+    (key) => {
+      Alert.alert(
+        item.completed ? "Uncomplete To Do" : "Complete To Do",
+        "Are you sure?",
+        [
+          { text: "Cancel" },
+          {
+            text: "I'm Sure",
+            onPress: () => {
+              const newTodos = { ...toDos };
+              newTodos[key].completed = !newTodos[key].completed;
+              saveTodos(newTodos);
+              setToDos(newTodos);
+            },
+          },
+        ]
+      );
+    },
+    [toDos]
+  );
+  const deleteTodo = useCallback(
+    (key) => {
+      Alert.alert("Delete To Do", "Are you sure?", [
+        { text: "Cancel" },
+        {
+          text: "I'm Sure",
+          onPress: () => {
+            const newTodos = { ...toDos };
+            delete newTodos[key];
+            saveTodos(newTodos);
+            setToDos(newTodos);
+          },
+        },
+      ]);
+    },
+    [toDos]
+  );
+  const onChangeText = useCallback((e) => {
+    setChangeText(e);
+  }, []);
+  useEffect(() => {
+    setChangeText(item.text);
+  }, [isEdit]);
+  return (
+    <View style={styles.toDo} key={key}>
+      <View style={styles.todoCont}>
+        {isEdit ? (
+          <TextInput
+            placeholder="Write And Save"
+            placeholderTextColor={"#fff"}
+            style={styles.itemInput}
+            value={changeTxt}
+            onChangeText={onChangeText}
+          />
+        ) : (
+          <Text style={styles.toDoText}>{item.text}</Text>
+        )}
+      </View>
+      <View style={styles.todoBtn}>
+        <TouchableOpacity onPress={btnEdit}>
+          <FontAwesome name="edit" size={18} color={theme.gray} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            completeTodo(key);
+          }}
+        >
+          <FontAwesome
+            name="check"
+            size={18}
+            color={item.completed ? theme.green : theme.gray}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            deleteTodo(key);
+          }}
+        >
+          <FontAwesome name="trash" size={18} color={theme.gray} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -150,6 +248,9 @@ const styles = StyleSheet.create({
   btnTextActive: {
     color: theme.white,
   },
+  todoCont: {
+    flexGrow: 1,
+  },
   input: {
     backgroundColor: "#fff",
     paddingVertical: 8,
@@ -164,6 +265,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.toDoBg,
     marginBottom: 10,
     borderRadius: 15,
+    gap: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -172,5 +274,16 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: 500,
+  },
+  todoBtn: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  itemInput: {
+    backgroundColor: "#fff",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 3,
+    fontSize: 16,
   },
 });
